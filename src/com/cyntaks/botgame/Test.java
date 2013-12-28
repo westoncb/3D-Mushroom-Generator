@@ -35,11 +35,17 @@ public class Test {
 	private boolean aPressed;
 	private boolean pPressed;
 	private boolean wPressed;
+	private boolean fPressed;
 	
 	private static boolean useAmbientLight;
 	
 	public static boolean MODE1 = true;
 	public static boolean wireframe;
+	private boolean drawFPS = false;
+	
+	private float lastFPS;
+	private int frameTimePassed; //used for calculating fps
+	private int framesRendered;
 	
 	private Mushroom mainMush;
 	
@@ -71,6 +77,17 @@ public class Test {
 		
 		while (!Display.isCloseRequested()) {
 			int delta = getDelta();
+			frameTimePassed += delta;
+			
+			if (frameTimePassed >= 1000) {
+				frameTimePassed = frameTimePassed % 1000;
+				int complement = 1000 - frameTimePassed;
+				
+				lastFPS = framesRendered * (complement/1000f);
+				
+				framesRendered = 0;
+			}
+			
 			update(delta);
 			render();
 			
@@ -98,7 +115,7 @@ public class Test {
 		
 		
 		mushrooms = new ArrayList<Mushroom>();
-		for (int i = 0; i < 25; i++) {
+		for (int i = 0; i < 55; i++) {
 			Mushroom mush = new Mushroom(10, 45, 45, 10);
 			mush.continuallyTransition = true;
 			mush.setHeadShading(0.5f, 0.2f);
@@ -170,7 +187,34 @@ public class Test {
 	
 	private void render() {
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+		
+		if (this.drawFPS) {
+			GL11.glMatrixMode(GL11.GL_PROJECTION);
+			GL11.glLoadIdentity();
+			GLU.gluOrtho2D(0, screenWidth, 0, screenHeight);
+			GL11.glMatrixMode(GL11.GL_MODELVIEW);
+			GL11.glLoadIdentity();
+			
+			int lightingOn = GL11.glGetInteger(GL11.GL_LIGHTING);
+//			System.out.println("lighting on: " + lightingOn);
+			GL11.glDisable(GL11.GL_LIGHTING);
+			GL11.glColor4f(1, 0, 0, 1);
+			GL11.glScalef(2, 2, 2);
+			SimpleText.drawString("FPS: " + lastFPS, 0, 0);
+			
+			if (lightingOn == 1)
+				GL11.glEnable(GL11.GL_LIGHTING);
+		}
+		
+		
+		GL11.glMatrixMode(GL11.GL_PROJECTION);
 		GL11.glLoadIdentity();
+		GLU.gluPerspective(45.0f, screenWidth/screenHeight, 0.1f, 1400.0f);
+		
+		GL11.glMatrixMode(GL11.GL_MODELVIEW);
+
+		GL11.glLoadIdentity();
+		
 		GL11.glTranslated(0, -15.0f, -200.0f + zTranslation);
 		 
 		GL11.glRotatef(5, 1, 0, 0);
@@ -205,6 +249,8 @@ public class Test {
 		
 		renderFloor();
 		configureLights();
+		
+		framesRendered++;
 	}
 	
 	private void renderFloor() {
@@ -296,6 +342,14 @@ public class Test {
 			}
 		} else
 			this.wPressed = false;
+		
+		if (Keyboard.isKeyDown(Keyboard.KEY_F)) {
+			if (!this.fPressed) {
+				this.fPressed = true;
+				this.drawFPS = !this.drawFPS;
+			}
+		} else
+			this.fPressed = false;
 		
 		if(Keyboard.isKeyDown(Keyboard.KEY_P)) {
 			if (!this.pPressed) {

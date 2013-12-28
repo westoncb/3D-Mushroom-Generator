@@ -102,6 +102,12 @@ public class Mushroom {
 		this.useBlending = false;
 		this.polygonRenderMode = RenderState.RENDER_MODE_FILL;
 		this.blendMode = RenderState.BLEND_MODE_NORMAL;
+		
+		this.initVAO();
+	}
+	
+	private void initVAO() {
+		
 	}
 	
 	public void transitionToNextMushroom(int delay) {
@@ -127,6 +133,8 @@ public class Mushroom {
 			headPoints = nextHeadPoints;
 			nextHeadPoints = createHead();
 		}
+		
+		
 	}
 	
 	private float[][] createHead() {
