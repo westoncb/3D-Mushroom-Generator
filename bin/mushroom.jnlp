@@ -1,0 +1,22 @@
+<!-- JNLP File for Mushroom Program--> 
+<jnlp 
+  spec="1.0+" 
+  codebase="http://tiledtext.com/programs/mushrooms/" 
+  href="/programs/mushrooms/mushroom.jnlp"> 
+  <information> 
+    <title>Mushroom Program!</title> 
+    <vendor>Weston C. Beecroft</vendor> 
+    <homepage href="http://tiledtext.com/"/> 
+    <description>Some procedurally generated mushrooms</description> 
+    <description kind="short">Technology Preview</description> 
+    <icon kind="splash" href="logo.png" />
+    <offline-allowed/> 
+  </information>
+  <resources> 
+    <j2se version="1.6+"/> 
+    <jar href="mushroom.jar" main="true"/>
+    <extension name="lwjgl" href="http://lwjgl.org/webstart/2.9.1/extension.jnlp" />
+  </resources> 
+  <application-desc main-class="com.cyntaks.botgame.Test">
+    </application-desc>
+</jnlp>
