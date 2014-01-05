@@ -1,16 +1,19 @@
 package com.cyntaks.botgame;
 
 import java.nio.FloatBuffer;
-
-import org.lwjgl.LWJGLException;
-import org.lwjgl.BufferUtils;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.opengl.*;
-import org.lwjgl.Sys;
-import org.lwjgl.util.glu.*;
-import org.lwjgl.util.vector.Vector3f;
-
 import java.util.ArrayList;
+
+import org.lwjgl.BufferUtils;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.Sys;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.opengl.ContextAttribs;
+import org.lwjgl.opengl.Display;
+import org.lwjgl.opengl.DisplayMode;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.PixelFormat;
+import org.lwjgl.util.glu.GLU;
 
 public class Test {
 	private static final int X = 0;
@@ -39,7 +42,6 @@ public class Test {
 	
 	private static boolean useAmbientLight;
 	
-	public static boolean MODE1 = true;
 	public static boolean wireframe;
 	private boolean drawFPS = false;
 	
@@ -48,10 +50,15 @@ public class Test {
 	private int framesRendered;
 	
 	private Mushroom mainMush;
+	private Mushroom mainMush2;
 	
 	private ArrayList<Mushroom> mushrooms;
 	
-	private float[][] floor;
+	private int floorVBOID;
+	private int floorPoints = 800;
+	
+	public static float lightTimer;
+	private float lightCycleTime = 5000;
 	
 	public static void main(String[] args) 
 	{
@@ -60,13 +67,18 @@ public class Test {
 	}
 	
 	public void start() {
+		PixelFormat pixelFormat = new PixelFormat();
+		ContextAttribs contextAttributes = new ContextAttribs(2, 1);
+		
 		try {
 			Display.setDisplayMode(new DisplayMode((int)screenWidth, (int)screenHeight));
-			Display.create();
+			Display.create(pixelFormat, contextAttributes);
 		} catch (LWJGLException ex) {
 			ex.printStackTrace();
 			System.exit(0);
 		}
+		
+		System.out.println("OpenGL version: " + GL11.glGetString(GL11.GL_VERSION));
 		
 		RenderState.initialize();
 		initGL();
@@ -92,14 +104,16 @@ public class Test {
 			render();
 			
 			Display.update();
-			Display.sync(60);
+//			Display.sync(60);
 		}
+		
+		destroyOpenGL();
 	}
 	
 	private void createMushrooms() {
 		float mainMushZOffset = 100;
 		
-		mainMush = new Mushroom(20, 50, 70, 15);
+		mainMush = new Mushroom(20, 50, 120, 35);
 		mainMush.continuallyTransition = true;
 		mainMush.setScale(0.01f);
 		mainMush.incrementScale = true;
@@ -108,14 +122,10 @@ public class Test {
 		mainMush.setHeadShading(0.8f, 0.2f);
 		mainMush.setStemShading(0.7f, 0.1f);
 		mainMush.polygonRenderMode = RenderState.RENDER_MODE_FILL;
-		if (!MODE1) {
-			mainMush.calculateNormals = true;
-			mainMush.useLighting = true;
-		}
 		
 		
 		mushrooms = new ArrayList<Mushroom>();
-		for (int i = 0; i < 55; i++) {
+		for (int i = 0; i < 62; i++) {
 			Mushroom mush = new Mushroom(10, 45, 45, 10);
 			mush.continuallyTransition = true;
 			mush.setHeadShading(0.5f, 0.2f);
@@ -124,39 +134,24 @@ public class Test {
 			mush.useLighting = true;
 			mush.calculateNormals = true;
 			
-			if (MODE1)
-				mush.transitionToNextMushroom((int)(Math.random()*4000 + 5000));
-			else
-				mush.transitionToNextMushroom((int)(Math.random()*1500 + 500));
+			mush.transitionToNextMushroom((int)(Math.random()*4000 + 5000));
+			
 			do {
 				mush.xTranslate = (float)Math.random()*200 - 100;
 				mush.zTranslate = (float)Math.random()*200 - 100;
 			} while (Math.sqrt(mush.xTranslate*mush.xTranslate + (mush.zTranslate-mainMushZOffset)*(mush.zTranslate - mainMushZOffset)) < 30);
 			
 			mush.setScale(0.15f);
-			
-			if (!MODE1) {
-				mush.useBlending = true;
-				mush.blendMode = RenderState.BLEND_MODE_ADDITIVE;
-				mush.polygonRenderMode = RenderState.RENDER_MODE_POINT;
-			} else {
-				mush.useLighting = true;
-			}
-			
-			if (MODE1)
-				mush.setColor(1, 1, 1, 1);
-			else {
-				mush.setHeadShading(1, 1);
-				mush.setStemShading(1, 1);
-				mush.setColor(0.4f, 0.8f, 0.4f, 0.1f);
-			}
+			mush.useLighting = true;
+			mush.setColor(1, 1, 1, 1);
 			
 			mushrooms.add(mush);
 		}
 	}
 	
 	private void createFloor() {
-		floor = new float[800][3];
+		float[][] floor = new float[floorPoints][3];
+		FloatBuffer buffer = BufferUtils.createFloatBuffer(floor.length*3);
 		
 		for (int i = 0; i < floor.length; i+= 4) {
 			int row = (i/4) / (20);
@@ -182,7 +177,17 @@ public class Test {
 			floor[i+3][X] = col*tileSize + xMod;
 			floor[i+3][Y] = y;
 			floor[i+3][Z] = row*tileSize + zMod + tileSize;
+			
+			buffer.put(floor[i]);
+			buffer.put(floor[i+1]);
+			buffer.put(floor[i+2]);
+			buffer.put(floor[i+3]);
 		}
+		buffer.flip();
+		
+		floorVBOID = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, floorVBOID);
+		GL15.glBufferData(GL15.GL_ARRAY_BUFFER, buffer, GL15.GL_STATIC_DRAW);
 	}
 	
 	private void render() {
@@ -196,7 +201,6 @@ public class Test {
 			GL11.glLoadIdentity();
 			
 			int lightingOn = GL11.glGetInteger(GL11.GL_LIGHTING);
-//			System.out.println("lighting on: " + lightingOn);
 			GL11.glDisable(GL11.GL_LIGHTING);
 			GL11.glColor4f(1, 0, 0, 1);
 			GL11.glScalef(2, 2, 2);
@@ -233,15 +237,12 @@ public class Test {
 		
 		mainMush.render();
 		
-		if (MODE1) {
-			mainMush.useBlending = true;
-			mainMush.blendMode = RenderState.BLEND_MODE_ADDITIVE;
-			mainMush.renderBackfaces = true;
-			mainMush.polygonRenderMode = RenderState.RENDER_MODE_POINT;
-			mainMush.useLighting = false;
-			mainMush.setColor(0, 1, 0, 0.25f);
-			mainMush.render();
-		}
+//		mainMush.useBlending = false;
+//		mainMush.renderBackfaces = false;
+//		mainMush.polygonRenderMode = RenderState.RENDER_MODE_POINT;
+//		mainMush.useLighting = false;
+//		mainMush.setColor(0, 1, 0, 0.25f);
+//		mainMush.render();
 		
 		for (Mushroom mush : mushrooms) {	
 			mush.render();
@@ -259,20 +260,26 @@ public class Test {
 		GL11.glColor4f(0.75f, 0.75f, 0.75f, 1);
 		RenderState.setPolygonRenderingMode(true, RenderState.RENDER_MODE_LINE);
 		
-		GL11.glBegin(GL11.GL_QUADS);
-			for (int i = 0; i < floor.length; i++) {
-				float x = floor[i][X];
-				float y = floor[i][Y];
-				float z = floor[i][Z];
-				
-				if (i < floor.length - 3) {
-					float[] normal = Test.getNormal(floor[i], floor[i + 1], floor[i + 2]);
-					GL11.glNormal3f(normal[X], normal[Y], normal[Z]);
-				}
-				
-				GL11.glVertex3f(x, y, z);
-			}
-		GL11.glEnd();
+		GL11.glEnableClientState(GL11.GL_VERTEX_ARRAY);
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, floorVBOID);
+		GL11.glVertexPointer(3, GL11.GL_FLOAT, 0, 0);
+		GL11.glDrawArrays(GL11.GL_QUADS, 0, floorPoints);
+		GL11.glDisableClientState(GL11.GL_VERTEX_ARRAY);
+		
+//		GL11.glBegin(GL11.GL_QUADS);
+//			for (int i = 0; i < floor.length; i++) {
+//				float x = floor[i][X];
+//				float y = floor[i][Y];
+//				float z = floor[i][Z];
+//				
+//				if (i < floor.length - 3) {
+//					float[] normal = Test.getNormal(floor[i], floor[i + 1], floor[i + 2]);
+//					GL11.glNormal3f(normal[X], normal[Y], normal[Z]);
+//				}
+//				
+//				GL11.glVertex3f(x, y, z);
+//			}
+//		GL11.glEnd();
 	}
 	
 	private void configureLights() {
@@ -288,6 +295,8 @@ public class Test {
 	
 	private void update(float delta) {
 		handleInput();
+		
+		lightTimer += 0.0004f;
 		
 		if (!lightRotationPausing) {
 			lightRotation += Math.PI*2/25.0f;
@@ -403,8 +412,8 @@ public class Test {
 
 	    //Return the resulting vector.
 	    float length = (float)Math.sqrt(output[X]*output[X] + output[Y]*output[Y] + output[Z]*output[Z]);
-	    if (!useAmbientLight)
-	    	length /= 1.2f;
+//	    if (!useAmbientLight)
+//	    	length /= 1.2f;
 	    
 	    output[X] /= length;
 	    output[Y] /= length;
@@ -453,5 +462,15 @@ public class Test {
 		int delta = (int) (time - lastFrameTime);
 		lastFrameTime = time;
 		return delta;
+	}
+	
+	private void destroyOpenGL() {
+		mainMush.destroy();
+		
+		for (Mushroom mush : mushrooms) {
+			mush.destroy();
+		}
+		
+		Display.destroy();
 	}
 }
